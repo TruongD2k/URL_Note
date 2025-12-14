@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>Link Hub with Thumbnails</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0b0c10;
+      color: #f5f5f5;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 760px;
+    }
+
+    h1 {
+      font-size: 26px;
+      margin-bottom: 16px;
+    }
+
+    /* LIST */
+    .card-list {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+
+    .card {
+      display: flex;
+      gap: 12px;
+      padding: 12px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      transition: 0.2s;
+      position: relative;
+    }
+
+    .card:hover {
+      background: rgba(255, 255, 255, 0.08);
+      transform: translateY(-2px);
+    }
+
+    .thumb {
+      width: 110px;
+      height: 70px;
+      border-radius: 8px;
+      background: #222;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+
+    .info {
+      flex: 1;
+    }
+
+    .title {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .url {
+      font-size: 12px;
+      opacity: 0.7;
+      word-break: break-all;
+    }
+
+    .actions {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      display: flex;
+      gap: 6px;
+      opacity: 0;
+      transition: 0.2s;
+    }
+
+    .card:hover .actions {
+      opacity: 1;
+    }
+
+    .btn-small {
+      padding: 4px 8px;
+      font-size: 11px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.15);
+      color: #fff;
+    }
+
+    .btn-small:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
+
+    /* FORM */
+    .form {
+      padding: 14px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    input {
+      width: 100%;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: #111;
+      color: #fff;
+      margin-bottom: 10px;
+    }
+
+    .btn-primary {
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      background: linear-gradient(135deg, #ff8a00, #e52e71);
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .btn-secondary {
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      background: transparent;
+      color: #fff;
+      cursor: pointer;
+      margin-left: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Link Hub có Thumbnail</h1>
+
+    <div id="list" class="card-list"></div>
+
+    <div class="form">
+      <h3 id="form-title">Thêm link mới</h3>
+      <input id="title" type="text" placeholder="Tiêu đề" />
+      <input id="url" type="text" placeholder="https://..." />
+      <button class="btn-primary" onclick="saveLink()">Lưu</button>
+      <button id="cancelBtn" class="btn-secondary" onclick="cancelEdit()" style="display:none">Huỷ</button>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = "thumbnail_links";
+    let links = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    let editingId = null;
+
+    function render() {
+      const list = document.getElementById("list");
+      list.innerHTML = "";
+
+      links.forEach(link => {
+        const card = document.createElement("div");
+        card.className = "card";
+
+        const img = document.createElement("img");
+        img.className = "thumb";
+        img.src = link.thumbnail || "https://via.placeholder.com/200x120?text=No+Image";
+
+        const info = document.createElement("div");
+        info.className = "info";
+
+        const title = document.createElement("div");
+        title.className = "title";
+        title.textContent = link.title;
+
+        const url = document.createElement("div");
+        url.className = "url";
+        url.textContent = link.url;
+
+        const actions = document.createElement("div");
+        actions.className = "actions";
+
+        const editBtn = document.createElement("button");
+        editBtn.className = "btn-small";
+        editBtn.textContent = "Sửa";
+        editBtn.onclick = () => startEdit(link.id);
+
+        const delBtn = document.createElement("button");
+        delBtn.className = "btn-small";
+        delBtn.textContent = "Xoá";
+        delBtn.onclick = () => deleteLink(link.id);
+
+        actions.appendChild(editBtn);
+        actions.appendChild(delBtn);
+
+        info.appendChild(title);
+        info.appendChild(url);
+
+        card.appendChild(img);
+        card.appendChild(info);
+        card.appendChild(actions);
+
+        list.appendChild(card);
+      });
+    }
+
+    async function fetchThumbnail(url) {
+      try {
+        const res = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(url)}`);
+        const data = await res.json();
+        return data?.data?.image?.url || null;
+      } catch {
+        return null;
+      }
+    }
+
+    async function saveLink() {
+      const title = document.getElementById("title").value.trim();
+      const url = document.getElementById("url").value.trim();
+
+      if (!title || !url) return alert("Nhập đủ tiêu đề và URL");
+
+      let finalUrl = url;
+      if (!/^https?:\/\//i.test(finalUrl)) finalUrl = "https://" + finalUrl;
+
+      const thumbnail = await fetchThumbnail(finalUrl);
+
+      if (editingId) {
+        links = links.map(l =>
+          l.id === editingId ? { ...l, title, url: finalUrl, thumbnail } : l
+        );
+        editingId = null;
+        document.getElementById("form-title").textContent = "Thêm link mới";
+        document.getElementById("cancelBtn").style.display = "none";
+      } else {
+        links.unshift({
+          id: crypto.randomUUID(),
+          title,
+          url: finalUrl,
+          thumbnail
+        });
+      }
+
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(links));
+      document.getElementById("title").value = "";
+      document.getElementById("url").value = "";
+      render();
+    }
+
+    function startEdit(id) {
+      const link = links.find(l => l.id === id);
+      if (!link) return;
+
+      editingId = id;
+      document.getElementById("title").value = link.title;
+      document.getElementById("url").value = link.url;
+      document.getElementById("form-title").textContent = "Chỉnh sửa link";
+      document.getElementById("cancelBtn").style.display = "inline-block";
+    }
+
+    function cancelEdit() {
+      editingId = null;
+      document.getElementById("title").value = "";
+      document.getElementById("url").value = "";
+      document.getElementById("form-title").textContent = "Thêm link mới";
+      document.getElementById("cancelBtn").style.display = "none";
+    }
+
+    function deleteLink(id) {
+      if (!confirm("Bạn có chắc muốn xoá link này")) return;
+      links = links.filter(l => l.id !== id);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(links));
+      render();
+    }
+
+    render();
+  </script>
+</body>
+</html>
